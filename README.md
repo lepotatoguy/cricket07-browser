@@ -67,6 +67,18 @@ work unchanged:
   until everyone's rosters match. Only `.ros` files travel; patched game files must already be the same on both
   computers.
 
+### 2026 squads
+
+`data/squads_2026.csv` holds 2026 squads for the international teams (sources and method in
+`data/README.md`). The repo has no roster file, since a roster holds the game's own data; build one from
+yours:
+
+1. In the game, save the roster: My Cricket > Load/Save, as `base`.
+2. Copy that roster out of the saves (`.../EA SPORTS(TM) Cricket 07/base.ros/base.ros`; in the browser, from
+   the page's private storage via the developer console).
+3. `python3 tools/roster.py apply base.ros data/squads_2026.csv s2026.ros`
+4. Import `s2026.ros` (above) and load `s2026` in the game. Names longer than 7 characters don't show up.
+
 ## Technical notes
 
 - **Memory keeps its original layout.** The executable is loaded at its original address, so every
