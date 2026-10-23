@@ -310,11 +310,14 @@ def apply_squads(roster, rows):
         t = roster.team_index(team)
         squad = pick_squad(pool)
         ids = roster.team_ids(t)
+        # the game hides a roster whose captain field changed, so the new captain takes the old one's slot
+        cap = captain_of(squad)
+        old = ids.index(roster.captain(t)) if roster.captain(t) in ids else 0
+        squad.remove(cap)
+        squad.insert(old, cap)
         for pid, row in zip(ids, squad):
             write_player(roster.player(roster.slot(pid)), row, full_masks)
             changed[pid] = team
-        cap = captain_of(squad)
-        roster.set_captain(t, ids[squad.index(cap)])
         print(f'{team}: {len(squad)} players, captain {short_name(cap["name"])}')
     # the replaced players' slots may also be in other teams (states, counties, A sides)
     for t in range(TEAMS):
