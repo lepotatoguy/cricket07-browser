@@ -17,8 +17,9 @@ updated squads; players beyond the game's squad size get trimmed by recent selec
 A `?` marks a value that couldn't be confirmed (mostly hands and bowling styles of recent debutants).
 
 **Associate teams** (Ireland, Scotland, Netherlands, Namibia, Canada, United States) use their 2026 T20
-World Cup squads (Namibia: the August 2026 tri-series), plus a few regular ODI and Test players; their
-ratings are rougher estimates than the Test nations'. Kenya and Bermuda have no reliable 2026 squad and
+World Cup squads (Namibia: the August 2026 tri-series), filled to 20 from their 2026 ODI squads and, where
+those run short, from 2024-25 squads (noted as `recent squad (2024-25)`); their ratings are rougher
+estimates than the Test nations'. Kenya and Bermuda have no reliable 2026 squad and
 keep the game's own.
 
 **Squads** come from the most recent announcement found for each format, mostly September and October
