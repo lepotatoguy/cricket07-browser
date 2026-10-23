@@ -82,7 +82,7 @@ async function importFromPicker(fileList) {
 // ------------------------------------------------------------------ rosters
 
 // Squads live in roster files (.ros) that the game saves and loads from its menu (My Cricket > Load/Save),
-// in a folder under My Documents. host/misc.c maps My Documents into the saves folder, which is the game
+// in a folder under My Documents, each in a folder of its own name (<folder>/2026.ros/2026.ros). host/misc.c maps My Documents into the saves folder, which is the game
 // folder's sibling: /opfs/userdata here (host/main.c). Online, every peer starts from fresh saves, so the
 // host's roster files are copied into them (the others download them first, in the lobby).
 const USERDATA_DIR = 'userdata';
@@ -128,12 +128,12 @@ async function writeFiles(dir, files) {
   }
 }
 
-// The folder the game keeps its rosters in: where roster files already are, else the one folder the game
-// made under My Documents, else ROSTER_SUBDIR.
+// The folder the game keeps its rosters in: the one holding the existing rosters' folders, else the one
+// folder the game made under My Documents, else ROSTER_SUBDIR.
 async function rosterFolder() {
   const dir = await userdataDir(true);
   const existing = await findRosters(dir, '', []);
-  if (existing.length) return existing[0].path.split('/').slice(0, -1).join('/');
+  if (existing.length) return existing[0].path.split('/').slice(0, -2).join('/');
   let docs = dir;
   try {
     for (const p of MYDOCS) docs = await docs.getDirectoryHandle(p);
@@ -148,7 +148,7 @@ async function importRosters(fileList) {
   const picked = [...fileList].filter((f) => isRoster(f.name));
   if (!picked.length) throw new Error('Pick one or more roster files (.ros).');
   const folder = await rosterFolder();
-  const files = await Promise.all(picked.map(async (f) => ({ path: `${folder}/${f.name}`, data: new Uint8Array(await f.arrayBuffer()) })));
+  const files = await Promise.all(picked.map(async (f) => ({ path: `${folder}/${f.name}/${f.name}`, data: new Uint8Array(await f.arrayBuffer()) })));
   await writeFiles(await userdataDir(true), files);
   return files.length;
 }
