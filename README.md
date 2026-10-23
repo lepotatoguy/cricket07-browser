@@ -59,8 +59,8 @@ work unchanged:
 - **Browser**: on the home screen, **Import roster (.ros)** copies roster files into the browser's saves;
   then load one in the game. Patched game files (textures, faces) come in by picking the patched game
   folder again (**Use a different game folder**); saves and rosters are kept.
-- **Native**: copy the roster files to `userdata/Documents and Settings/Player/My Documents/<the game's
-  folder>/`.
+- **Native**: copy a roster to `userdata/Documents and Settings/Player/My Documents/EA SPORTS(TM) Cricket
+  07/<name>.ros/<name>.ros`: the game keeps each roster in a folder of its own name.
 - **Online**: every match starts from fresh saves holding the host's roster files. A player whose
   rosters differ from the host's is asked in the lobby to download the host's, and the match can't start
   until everyone's rosters match. Only `.ros` files travel; patched game files must already be the same on both
