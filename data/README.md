@@ -29,7 +29,7 @@ are judged from recent ICC rankings and career records (averages, strike rates, 
 ## Making the roster
 
 ```bash
-python3 tools/roster.py apply base.ros data/squads_2026.csv squads2026.ros
+python3 tools/roster.py apply base.ros data/squads_2026.csv s2026.ros   # names: 8 characters at most
 ```
 
 `base.ros` is a roster saved from the game (My Cricket > Load/Save). Each team's 20 players are replaced by

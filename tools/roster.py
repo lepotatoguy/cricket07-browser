@@ -310,14 +310,11 @@ def apply_squads(roster, rows):
         t = roster.team_index(team)
         squad = pick_squad(pool)
         ids = roster.team_ids(t)
-        # the game hides a roster whose captain field changed, so the new captain takes the old one's slot
-        cap = captain_of(squad)
-        old = ids.index(roster.captain(t)) if roster.captain(t) in ids else 0
-        squad.remove(cap)
-        squad.insert(old, cap)
         for pid, row in zip(ids, squad):
             write_player(roster.player(roster.slot(pid)), row, full_masks)
             changed[pid] = team
+        cap = captain_of(squad)
+        roster.set_captain(t, ids[squad.index(cap)])
         print(f'{team}: {len(squad)} players, captain {short_name(cap["name"])}')
     # the replaced players' slots may also be in other teams (states, counties, A sides)
     for t in range(TEAMS):
@@ -346,6 +343,9 @@ if __name__ == '__main__':
         r = Roster(open(args[0], 'rb').read())
         print_squad(r, r.team_index(args[1]))
     elif cmd == 'apply':
+        stem = args[2].replace('\\', '/').rsplit('/', 1)[-1].rsplit('.', 1)[0]
+        if len(stem) > 8:   # the game leaves longer names out of its Load list (7 characters showed, 9 didn't)
+            sys.exit(f'{args[2]}: the game only lists rosters with names of up to 8 characters')
         r = Roster(open(args[0], 'rb').read())
         with open(args[1], newline='') as f:
             apply_squads(r, list(csv.DictReader(f)))

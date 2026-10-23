@@ -90,6 +90,7 @@ const MYDOCS = ['Documents and Settings', 'Player', 'My Documents'];
 const ROSTER_SUBDIR = 'EA SPORTS(TM) Cricket 07';   // used until the game has made its own folder there
 const isRoster = (name) => /\.ros$/i.test(name);
 const ROSTER_MAX = 64e6;   // bytes, all roster files together
+const ROSTER_NAME_MAX = 8;   // characters before .ros (DOS-style names, it seems)
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 async function userdataDir(create) {
@@ -147,6 +148,9 @@ async function rosterFolder() {
 async function importRosters(fileList) {
   const picked = [...fileList].filter((f) => isRoster(f.name));
   if (!picked.length) throw new Error('Pick one or more roster files (.ros).');
+  // the game leaves rosters with long names out of its Load list (7 characters showed, 9 didn't)
+  const long = picked.filter((f) => f.name.replace(/\.ros$/i, '').length > ROSTER_NAME_MAX);
+  if (long.length) throw new Error(`Rename ${long.map((f) => f.name).join(', ')} to at most ${ROSTER_NAME_MAX} characters before the .ros: the game doesn't list longer names.`);
   const folder = await rosterFolder();
   const files = await Promise.all(picked.map(async (f) => ({ path: `${folder}/${f.name}/${f.name}`, data: new Uint8Array(await f.arrayBuffer()) })));
   await writeFiles(await userdataDir(true), files);
