@@ -14,6 +14,7 @@ __pycache__/
 functions.json
 ghidra_project/
 *.csv
+!data/squads_2026.csv
 .dev.vars
 .wrangler/
 node_modules/

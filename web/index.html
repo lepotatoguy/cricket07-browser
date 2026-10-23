@@ -215,7 +215,9 @@
         </div>
         <p class="small" style="margin-top:22px">Use a controller, or the keyboard: arrows to move, S to select.<br>
           Fullscreen: <kbd>Alt</kbd> + <kbd>Enter</kbd> (<kbd>⌥</kbd> + <kbd>Enter</kbd> on Mac) or the button in the corner.</p>
-        <p class="small"><a href="#" id="reset">Use a different game folder</a></p>
+        <p class="small"><a href="#" id="reset">Use a different game folder</a> ·
+          <label style="cursor:pointer;text-decoration:underline">Import roster (.ros)<input id="roster-file" type="file" accept=".ros" multiple hidden></label></p>
+        <p id="roster-info" class="small"></p>
       </section>
 
       <!-- multiplayer: host or join -->
@@ -287,6 +289,10 @@
               </label>
               <p class="small" style="margin:8px 0 0">Auto picks the lowest delay your connection allows. Higher is smoother on a bad link; 2 or 3 frames need a direct connection in the same city or country.</p>
             </details>
+          </div>
+          <div id="np-roster" class="hidden">
+            <p id="np-roster-msg" class="small" style="margin:0"></p>
+            <button id="np-roster-get" class="btn ghost hidden" style="margin-top:8px">Download host's roster</button>
           </div>
           <p id="np-wait" class="hidden small"><span class="spinner"></span>Waiting for the host to start.</p>
           <p id="np-lobbymsg" class="msg"></p>
