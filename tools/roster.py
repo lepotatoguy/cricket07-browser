@@ -8,7 +8,8 @@ Usage:
 A roster is what the game saves from My Cricket > Load/Save. Layout, worked out from saved rosters and
 the in-game player screens (offsets in bytes, little-endian):
 
-  0x00   header: '20CM', file size, 0, file size - 0x1c, 0, 8 unknown bytes at 0x14 (kept as they are)
+  0x00   header: '20CM', file size, 0, file size - 0x1c, 0, checksum of 0x1c to the end, checksum of
+         0x00-0x17 (the game lists only rosters whose checksums match; see checksum())
   0x1c   67 team records of 0xaf8 bytes, in the order of the team-name table
            +0x000  20 player ids (u16)    +0x028  team number    +0x02e  captain's player id
            +0xae0  20 shirt numbers (u8)
@@ -62,6 +63,30 @@ SPINNERS = {0, 1, 2, 3}
 ROLES = {1: 'BAT', 2: 'OBT', 3: 'BWL', 4: 'SBW', 5: 'ASP', 6: 'WK', 7: 'WKB', 8: 'OWK', 9: 'ALL', 10: 'OBW'}
 
 
+def _crc_table():
+    table = []
+    for i in range(256):
+        c = i << 24
+        for _ in range(8):
+            c = ((c << 1) ^ (0x04C11DB7 if c & 0x80000000 else 0)) & 0xffffffff
+        table.append(c)
+    return table
+
+
+CRC_TABLE = _crc_table()
+
+
+def checksum(buf):
+    """The game's roster checksum: CRC-32 (polynomial 0x04C11DB7, MSB first) in its non-augmented form,
+    which takes the first four bytes, inverted, as the starting register and shifts each later byte in."""
+    if len(buf) < 4:
+        return 0
+    c = ~int.from_bytes(buf[:4], 'big') & 0xffffffff
+    for b in buf[4:]:
+        c = (((c << 8) & 0xffffffff) | b) ^ CRC_TABLE[c >> 24]
+    return ~c & 0xffffffff
+
+
 def shown(stored):
     for (s0, v0), (s1, v1) in zip(CURVE, CURVE[1:]):
         if s0 <= stored <= s1:
@@ -78,6 +103,12 @@ class Roster:
         if data[:4] != b'20CM' or struct.unpack_from('<I', data, 4)[0] != len(data):
             raise ValueError('not a Cricket 07 roster')
         self.data = bytearray(data)
+
+    def save(self):
+        """The roster's bytes with fresh checksums."""
+        struct.pack_into('<I', self.data, 0x14, checksum(self.data[0x1c:]))
+        struct.pack_into('<I', self.data, 0x18, checksum(self.data[:0x18]))
+        return bytes(self.data)
 
     # ---- teams
     def team_name(self, t):
@@ -315,7 +346,7 @@ if __name__ == '__main__':
         r = Roster(open(args[0], 'rb').read())
         with open(args[1], newline='') as f:
             apply_squads(r, list(csv.DictReader(f)))
-        open(args[2], 'wb').write(r.data)
+        open(args[2], 'wb').write(r.save())
         print(f'wrote {args[2]}')
     else:
         print(__doc__)
