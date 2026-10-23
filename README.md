@@ -61,7 +61,7 @@ work unchanged:
   folder again (**Use a different game folder**); saves and rosters are kept.
 - **Native**: copy a roster to `userdata/Documents and Settings/Player/My Documents/EA SPORTS(TM) Cricket
   07/<name>.ros/<name>.ros`: the game keeps each roster in a folder of its own name, and only lists names
-  of up to 8 characters.
+  of up to 7 characters.
 - **Online**: every match starts from fresh saves holding the host's roster files. A player whose
   rosters differ from the host's is asked in the lobby to download the host's, and the match can't start
   until everyone's rosters match. Only `.ros` files travel; patched game files must already be the same on both

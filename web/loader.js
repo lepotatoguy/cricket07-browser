@@ -90,7 +90,7 @@ const MYDOCS = ['Documents and Settings', 'Player', 'My Documents'];
 const ROSTER_SUBDIR = 'EA SPORTS(TM) Cricket 07';   // used until the game has made its own folder there
 const isRoster = (name) => /\.ros$/i.test(name);
 const ROSTER_MAX = 64e6;   // bytes, all roster files together
-const ROSTER_NAME_MAX = 8;   // characters before .ros (DOS-style names, it seems)
+const ROSTER_NAME_MAX = 7;   // characters before .ros: the longest seen in the game's list (9 wasn't)
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 async function userdataDir(create) {

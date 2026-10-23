@@ -344,8 +344,8 @@ if __name__ == '__main__':
         print_squad(r, r.team_index(args[1]))
     elif cmd == 'apply':
         stem = args[2].replace('\\', '/').rsplit('/', 1)[-1].rsplit('.', 1)[0]
-        if len(stem) > 8:   # the game leaves longer names out of its Load list (7 characters showed, 9 didn't)
-            sys.exit(f'{args[2]}: the game only lists rosters with names of up to 8 characters')
+        if len(stem) > 7:   # the game leaves longer names out of its Load list (7 characters showed, 9 didn't)
+            sys.exit(f'{args[2]}: the game only lists rosters with names of up to 7 characters')
         r = Roster(open(args[0], 'rb').read())
         with open(args[1], newline='') as f:
             apply_squads(r, list(csv.DictReader(f)))
