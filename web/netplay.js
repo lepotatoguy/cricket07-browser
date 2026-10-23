@@ -8,11 +8,13 @@
   'use strict';
 
 
-  // Room client. opts: { url (ws(s)://.../netplay/<CODE>?ticket=...), name, version, iceServers (STUN/TURN
+  // Room client. opts: { url (ws(s)://.../netplay/<CODE>?ticket=...), name, version, roster (digest of this
+  // peer's roster files, '' for none), iceServers (STUN/TURN
   // for the direct channels, from the ticket), relayOnly (direct channels only through TURN), testLoss (tests:
   // drop this fraction of direct packets on arrival), onLobby(lobby),
   // onStart(session), onLeft(slot), onError(message), onClose(), reconnectUrl() (async: a fresh url with a
-  // new ticket), onReconnect(state) }. If the room connection drops during a game it reconnects, rejoins
+  // new ticket), onReconnect(state), onRosterRequest(slot) (host: that peer wants our roster),
+  // onRosterProgress(received, total), onRoster(text) (the host's roster, as the host passed it to sendRoster) }. If the room connection drops during a game it reconnects, rejoins
   // its slot and resends its recent inputs (the others wait in lockstep meanwhile).
   //
   // Inputs go through the room (a relay every peer can reach) and, where WebRTC is available, also over a
@@ -77,7 +79,7 @@
         retries = 0;
         heard = Date.now();
         if (rejoin) send({ t: 'rejoin', slot: me, version: opts.version });
-        else send({ t: 'hello', name: opts.name, version: opts.version });
+        else send({ t: 'hello', name: opts.name, version: opts.version, roster: opts.roster || '' });
         send({ t: 'ping', ts: Date.now() });
       };
       ws.onclose = () => {
@@ -179,8 +181,24 @@
       }
       else if (m.t === 'error') opts.onError?.(m.msg);
       else if (m.t === 'sig' && webrtc) onSignal(m.from, m.data).catch((e) => console.warn('webrtc:', e));
+      else if (m.t === 'roster-req') opts.onRosterRequest?.(m.from);
+      else if (m.t === 'roster-part') onRosterPart(m);
       else if (m.t === 'left') { if (game) game._netplay_player_left(m.slot); opts.onLeft?.(m.slot); }
       else onMessage(m, null);
+    }
+
+    // The host's roster arrives in parts (the room caps a message's size); a newer transfer replaces an older one.
+    let incoming = null;
+    function onRosterPart(m) {
+      if (!incoming || incoming.id !== m.id) incoming = { id: m.id, parts: new Array(m.n), got: 0 };
+      if (m.i < 0 || m.i >= incoming.parts.length || incoming.parts[m.i] != null) return;
+      incoming.parts[m.i] = m.part;
+      opts.onRosterProgress?.(++incoming.got, incoming.parts.length);
+      if (incoming.got === incoming.parts.length) {
+        const text = incoming.parts.join('');
+        incoming = null;
+        opts.onRoster?.(text);
+      }
     }
 
     function deliver(M, m) {
@@ -213,6 +231,13 @@
 
     return {
       start(delay) { send({ t: 'start', delay }); },
+      // rosters (lobby only): report ours, ask the host for theirs, or (host) send ours to one peer
+      setRoster(digest) { send({ t: 'roster', digest }); },
+      requestRoster() { send({ t: 'roster-req' }); },
+      sendRoster(to, text) {
+        const PART = 256 * 1024, n = Math.max(1, Math.ceil(text.length / PART)), id = Date.now();
+        for (let i = 0; i < n; i++) send({ t: 'roster-part', to, id, i, n, part: text.slice(i * PART, (i + 1) * PART) });
+      },
       // Hooks a running game up to the room (after it was started with the session's settings).
       // The game thread kicks the pump as soon as it queues a message (host/netplay.c); the timer is a
       // safety net.

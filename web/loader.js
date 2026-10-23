@@ -79,6 +79,100 @@ async function importFromPicker(fileList) {
   $('progress').classList.add('hidden');
 }
 
+// ------------------------------------------------------------------ rosters
+
+// Squads live in roster files (.ros) that the game saves and loads from its menu (My Cricket > Load/Save),
+// in a folder under My Documents. host/misc.c maps My Documents into the saves folder, which is the game
+// folder's sibling: /opfs/userdata here (host/main.c). Online, every peer starts from fresh saves, so the
+// host's roster files are copied into them (the others download them first, in the lobby).
+const USERDATA_DIR = 'userdata';
+const MYDOCS = ['Documents and Settings', 'Player', 'My Documents'];
+const ROSTER_SUBDIR = 'EA SPORTS(TM) Cricket 07';   // used until the game has made its own folder there
+const isRoster = (name) => /\.ros$/i.test(name);
+const ROSTER_MAX = 64e6;   // bytes, all roster files together
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+async function userdataDir(create) {
+  return (await navigator.storage.getDirectory()).getDirectoryHandle(USERDATA_DIR, { create });
+}
+
+async function findRosters(dir, prefix, out) {
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind === 'directory') await findRosters(h, prefix + name + '/', out);
+    else if (isRoster(name)) out.push({ path: prefix + name, handle: h });
+  }
+  return out;
+}
+
+// This browser's roster files: [{ path (relative to the saves folder), data (Uint8Array) }], sorted by path.
+async function readRosters() {
+  let dir;
+  try { dir = await userdataDir(false); } catch { return []; }
+  const found = (await findRosters(dir, '', [])).sort((a, b) => (a.path < b.path ? -1 : 1));
+  return Promise.all(found.map(async ({ path, handle }) => ({ path, data: new Uint8Array(await (await handle.getFile()).arrayBuffer()) })));
+}
+
+// Short digest of a roster set ('' for none): peers with equal digests play with the same squads.
+async function rosterDigest(files) {
+  if (!files.length) return '';
+  const lines = [];
+  for (const f of files) lines.push(`${f.path}:${hex(await crypto.subtle.digest('SHA-256', f.data))}`);
+  return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(lines.join('\n')))).slice(0, 32);
+}
+
+async function writeFiles(dir, files) {
+  for (const f of files) {
+    const w = await (await fileHandle(dir, f.path, true)).createWritable();
+    await w.write(f.data);
+    await w.close();
+  }
+}
+
+// The folder the game keeps its rosters in: where roster files already are, else the one folder the game
+// made under My Documents, else ROSTER_SUBDIR.
+async function rosterFolder() {
+  const dir = await userdataDir(true);
+  const existing = await findRosters(dir, '', []);
+  if (existing.length) return existing[0].path.split('/').slice(0, -1).join('/');
+  let docs = dir;
+  try {
+    for (const p of MYDOCS) docs = await docs.getDirectoryHandle(p);
+    const subdirs = [];
+    for await (const [name, h] of docs.entries()) if (h.kind === 'directory') subdirs.push(name);
+    if (subdirs.length === 1) return [...MYDOCS, subdirs[0]].join('/');
+  } catch { /* the game hasn't run yet */ }
+  return [...MYDOCS, ROSTER_SUBDIR].join('/');
+}
+
+async function importRosters(fileList) {
+  const picked = [...fileList].filter((f) => isRoster(f.name));
+  if (!picked.length) throw new Error('Pick one or more roster files (.ros).');
+  const folder = await rosterFolder();
+  const files = await Promise.all(picked.map(async (f) => ({ path: `${folder}/${f.name}`, data: new Uint8Array(await f.arrayBuffer()) })));
+  await writeFiles(await userdataDir(true), files);
+  return files.length;
+}
+
+// Roster sets travel as JSON with base64 contents.
+function packRosters(files) {
+  const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+  return JSON.stringify(files.map((f) => ({ path: f.path, data: b64(f.data) })));
+}
+function unpackRosters(text) {
+  const files = JSON.parse(text).map((f) => ({ path: String(f.path), data: Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0)) }));
+  // only roster files, and only inside the saves folder
+  if (files.some((f) => !isRoster(f.path) || f.path.split('/').some((p) => !p || p === '.' || p === '..')))
+    throw new Error('The host sent something other than roster files.');
+  return files;
+}
+
+async function showRosters() {
+  const files = await readRosters().catch(() => []);
+  $('roster-info').textContent = files.length
+    ? `Rosters: ${files.map((f) => f.path.split('/').pop()).join(', ')}. Load one in the game: My Cricket > Load/Save.`
+    : 'No roster files yet: the game plays with its own squads.';
+}
+
 // ------------------------------------------------------------------ input
 
 // KeyboardEvent.code -> USB HID usage (what host/input.c's key table uses)
@@ -279,7 +373,12 @@ function showNetStatus(M, session) {
 async function run(session) {
   $('panel').classList.add('hidden');
   fullscreenTip();
-  if (session) await clearNetSaves(session);
+  if (session) {
+    await clearNetSaves(session);
+    // the host's roster files, which every peer now has (the lobby checks their digests match)
+    const root = await navigator.storage.getDirectory();
+    await writeFiles(await root.getDirectoryHandle(netSaves(session), { create: true }), session.rosters);
+  }
   sizeCanvas();
   const script = document.createElement('script');
   script.src = 'build/recomp.js';
@@ -361,6 +460,12 @@ async function boot() {
   $('play').onclick = () => run().catch(fail);
   $('go-online').onclick = goOnline;
   for (const b of document.querySelectorAll('[data-go]')) b.onclick = () => show(b.dataset.go);
+  $('roster-file').onchange = async (e) => {
+    try { const n = await importRosters(e.target.files); await showRosters(); $('roster-info').textContent += ` (${n} imported)`; }
+    catch (err) { $('roster-info').textContent = err.message; }
+    e.target.value = '';
+  };
+  showRosters();
   $('folder').onchange = async (e) => {
     $('pick').classList.add('hidden');
     try { await importFromPicker(e.target.files); ready(); }
@@ -474,10 +579,15 @@ function setupOnline() {
     $('np-room').textContent = code;
     $('invite').textContent = invite.href;
     const version = await buildVersion();
+    // the roster files this page plays with online: its own, until it downloads the host's
+    let rosters = await readRosters();
+    if (rosters.reduce((n, f) => n + f.data.length, 0) > ROSTER_MAX) { msg('Your roster files are too large to share.'); return; }
+    let roster = await rosterDigest(rosters);
+    let fetching = false;   // downloading the host's roster
     let session = null;
     const left = new Set();
     const me = client = RcNetplay.connect({
-      url, name, version, reconnectUrl: roomUrl, iceServers, relayOnly: params.get('turn') === 'only',
+      url, name, version, roster, reconnectUrl: roomUrl, iceServers, relayOnly: params.get('turn') === 'only',
       onReconnect(state) { if (session) session.reconnecting = state === 'connecting'; },
       onLobby(l) {
         if (client !== me) return;   // a room this page already left
@@ -511,15 +621,64 @@ function setupOnline() {
         const auto = RcNetplay.autoDelay(l.players);
         $('np-delay').options[0].textContent = `Auto (${auto} frames, ${Math.round(auto * 1000 / 60)} ms)`;
         $('np-wait').classList.toggle('hidden', l.host);
+        lobbyRoster(l);
+      },
+      onRosterRequest(slot) { if (client === me) me.sendRoster(slot, packRosters(rosters)); },
+      onRosterProgress(got, total) { if (fetching) $('np-roster-msg').textContent = `Downloading the host's roster… ${Math.round(100 * got / total)}%`; },
+      async onRoster(text) {
+        if (client !== me || !fetching) return;
+        fetching = false;
+        try {
+          const files = unpackRosters(text);
+          const digest = await rosterDigest(files);
+          if (digest !== lastPlayers.find((p) => p.slot === 0)?.roster) throw new Error('The roster changed while downloading; try again.');
+          rosters = files;
+          roster = digest;
+          me.setRoster(roster);   // the lobby comes back and clears the prompt
+        } catch (e) { $('np-roster-msg').textContent = e.message; $('np-roster-get').disabled = false; }
       },
       onStart(s) {
-        session = { ...s, client, left };
+        session = { ...s, client, left, rosters };
         run(session).catch(fail);
       },
       onLeft(slot) { left.add(slot); },
       onError(e) { msg(e); setTimeout(() => { if ($('np-msg').textContent === e) msg(''); }, 8000); },
       onClose() { if (!session && client === me) { client = null; show('online'); msg('Disconnected from the room.'); } },
     });
+
+    // Rosters in the lobby: everyone plays with the host's. A peer whose roster differs is asked to download
+    // it; when the host has none, the peer just leaves its own out. The host sees who still differs.
+    function lobbyRoster(l) {
+      const host = l.players.find((p) => p.slot === 0);
+      if (!host) fetching = false;   // the host left mid-download
+      const names = (files) => files.map((f) => f.path.split('/').pop()).join(', ');
+      let text = '', ask = false;
+      if (l.host) {
+        const behind = l.players.filter((p) => p.slot !== l.you && p.roster !== roster);
+        text = (rosters.length ? `Your roster: ${names(rosters)}.` : 'No roster: the game\'s own squads.') +
+          (behind.length ? ` Waiting for ${behind.map((p) => p.name).join(', ')} to download it.` : '');
+      } else if (host && host.roster !== roster) {
+        if (!host.roster) {
+          rosters = [];
+          roster = '';
+          me.setRoster('');
+          return;
+        }
+        ask = true;
+        text = fetching ? $('np-roster-msg').textContent : 'The host plays with a different roster (squads). Download it to play this match?';
+      } else if (host) text = rosters.length ? `Roster: ${names(rosters)} (same as the host).` : 'Roster: the game\'s own squads.';
+      $('np-roster').classList.toggle('hidden', !text);
+      $('np-roster-msg').textContent = text;
+      $('np-roster-get').classList.toggle('hidden', !ask);
+      $('np-roster-get').disabled = fetching;
+    }
+    $('np-roster-get').onclick = () => {
+      if (client !== me || fetching) return;
+      fetching = true;
+      $('np-roster-get').disabled = true;
+      $('np-roster-msg').textContent = 'Asking the host for their roster…';
+      me.requestRoster();
+    };
   }
   function leave() {
     const c = client;

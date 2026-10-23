@@ -76,7 +76,7 @@ const REJOIN_GRACE_MS = 15000;
 
 // One room: the first peer to join hosts. Peers say hello (name, game build), the host starts the session
 // (fixing the player count and input delay), then every input/hash batch a peer sends is relayed to the
-// others. Uses WebSocket hibernation; the lobby lives in the sockets' attachments and durable storage.
+// others. In the lobby the host's roster (squad files) can be relayed to a peer whose roster differs. Uses WebSocket hibernation; the lobby lives in the sockets' attachments and durable storage.
 export class NetplayRoom {
   constructor(ctx) { this.ctx = ctx; }
 
@@ -105,7 +105,7 @@ export class NetplayRoom {
 
   async lobby() {
     const started = (await this.ctx.storage.get('started')) || null;
-    const players = this.peers().map(({ slot, name, version, rtt, p2p, via }) => ({ slot, name, version, rtt, p2p: p2p || {}, via }))
+    const players = this.peers().map(({ slot, name, version, roster, rtt, p2p, via }) => ({ slot, name, version, roster: roster || '', rtt, p2p: p2p || {}, via }))
       .sort((a, b) => a.slot - b.slot);
     const colo = await this.where();
     for (const p of this.peers()) this.send(p.ws, { t: 'lobby', you: p.slot, host: p.slot === 0, players, started, colo });
@@ -121,7 +121,7 @@ export class NetplayRoom {
       let slot = 0;
       while (used.has(slot)) slot++;
       if (slot >= MAX_PLAYERS) { this.send(ws, { t: 'error', msg: 'The room is full.' }); ws.close(4001, 'full'); return; }
-      ws.serializeAttachment({ ...me, slot, name: String(msg.name || `Player ${slot + 1}`).slice(0, 24), version: String(msg.version || ''), rtt: 0 });
+      ws.serializeAttachment({ ...me, slot, name: String(msg.name || `Player ${slot + 1}`).slice(0, 24), version: String(msg.version || ''), roster: String(msg.roster || '').slice(0, 64), rtt: 0 });
       await this.lobby();
       return;
     }
@@ -149,6 +149,7 @@ export class NetplayRoom {
       const peers = this.peers();
       const versions = new Set(peers.map((p) => p.version));
       if (versions.size > 1) { this.send(ws, { t: 'error', msg: 'Players have different game builds or files; everyone must reload the page.' }); return; }
+      if (new Set(peers.map((p) => p.roster || '')).size > 1) { this.send(ws, { t: 'error', msg: 'Players have different rosters: the others must download yours first.' }); return; }
       const slots = peers.map((p) => p.slot).sort((a, b) => a - b);
       if (slots.some((s, i) => s !== i)) { this.send(ws, { t: 'error', msg: 'Waiting for the player list to settle; try again.' }); return; }
       const started = { players: peers.length, delay: Math.max(2, Math.min(30, Number(msg.delay) || 6)) };
@@ -165,6 +166,21 @@ export class NetplayRoom {
       for (const [k, v] of Object.entries(msg.rtt || {})) p2p[Number(k)] = Math.max(0, Math.min(5000, Math.round(Number(v) || 0)));
       ws.serializeAttachment({ ...me, p2p });
       if (!(await this.ctx.storage.get('started'))) await this.lobby();
+      return;
+    }
+    // Rosters, in the lobby only: a peer reports the digest of its roster files ('' for the game's own
+    // squads), asks the host for the host's files, and the host sends them in parts to that one peer.
+    if (msg.t === 'roster' || msg.t === 'roster-req' || msg.t === 'roster-part') {
+      if (await this.ctx.storage.get('started')) return;
+      if (msg.t === 'roster') {
+        ws.serializeAttachment({ ...me, roster: String(msg.digest || '').slice(0, 64) });
+        await this.lobby();
+      } else if (msg.t === 'roster-req' && me.slot !== 0) {
+        for (const p of this.peers()) if (p.slot === 0) this.send(p.ws, { t: 'roster-req', from: me.slot });
+      } else if (msg.t === 'roster-part' && me.slot === 0 && typeof msg.part === 'string' && msg.part.length <= 300000) {
+        for (const p of this.peers()) if (p.slot === msg.to)
+          this.send(p.ws, { t: 'roster-part', id: Number(msg.id) || 0, i: Number(msg.i) || 0, n: Number(msg.n) || 0, part: msg.part });
+      }
       return;
     }
     if (msg.t === 'in') {   // relay as-is to everyone else

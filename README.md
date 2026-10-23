@@ -49,6 +49,23 @@ Controls: a game controller, or the keyboard (arrow keys to move, **S** to selec
 cursor). Use `RC_NO_AUDIO=1` to mute the native app, or `?mute` on the page. Both players in an online
 match need the same build and the same game files.
 
+## Squads and rosters
+
+Cricket 07 keeps squads in roster files (`.ros`), saved and loaded from the game's menu (My Cricket >
+Load/Save) in a folder under My Documents. The Windows layer maps My Documents into the saves folder
+(`userdata/`, next to the game folder), so rosters made in the game, or by community patches and editors,
+work unchanged:
+
+- **Browser**: on the home screen, **Import roster (.ros)** copies roster files into the browser's saves;
+  then load one in the game. Patched game files (textures, faces) come in by picking the patched game
+  folder again (**Use a different game folder**); saves and rosters are kept.
+- **Native**: copy the roster files to `userdata/Documents and Settings/Player/My Documents/<the game's
+  folder>/`.
+- **Online**: every match starts from fresh saves holding the host's roster files. A player whose
+  rosters differ from the host's is asked in the lobby to download the host's, and the match can't start
+  until everyone's rosters match. Only `.ros` files travel; patched game files must already be the same on both
+  computers.
+
 ## Technical notes
 
 - **Memory keeps its original layout.** The executable is loaded at its original address, so every
