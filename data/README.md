@@ -23,4 +23,17 @@ Zealand Test (May and June 2026), Bangladesh T20I (2026 Asian Games), Zimbabwe T
 
 **Ratings are estimates, not sourced figures.** No official overall exists for real cricketers; these
 are judged from recent ICC rankings and career records (averages, strike rates, economy) and scaled 0 to
-100. They will be mapped onto the game's own rating scale once the roster format is known.
+100. `tools/roster.py apply` maps them onto the game's narrower scales (batting 50 to 100, bowling 10 to
+100) and spreads each into the game's individual attributes with small fixed variations.
+
+## Making the roster
+
+```bash
+python3 tools/roster.py apply base.ros data/squads_2026.csv squads2026.ros
+```
+
+`base.ros` is a roster saved from the game (My Cricket > Load/Save). Each team's 20 players are replaced by
+the top 20 of its pool (most formats first, then rating, at least two wicketkeepers), keeping the game's
+player slots, so a replaced player also changes in any state, county or invitational side that shares
+his slot. New players get default faces, no career statistics, and the replaced player's birth date and
+special skills.
